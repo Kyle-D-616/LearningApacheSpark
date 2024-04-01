@@ -1,0 +1,68 @@
+#Yello Trip Read
+trip_input_df = (spark.read
+    .format("csv")
+    .option("header", True)
+    .load("/databricks-datasets/nyctaxi/tripdata/yellow/yellow_tripdata_2019-01.csv.gz"))
+
+display(trip_input_df)
+
+/***************************************
+
+****************************************/
+
+temp_df = trip_input_df.withColumnRenamed("store_and_fwd_flg", "store_forward_flag")
+display(temp_df)
+
+/***************************************
+
+****************************************/
+
+from pyspark.sql.functions import col, substring, to_date, regexp_replace
+
+trip_df = (trip_input_df
+           .withColumn("year_month", regexp_replace(substring("tpep_pickup_datetime",1,7), '-', '_'))
+           .withColumn("pickup_dt", to_date("tpep_pickup_datetime", "yyyy-MM-dd HH:mm:ss"))
+           .withColumn("dropoff_dt", to_date("tpep_dropoff_datetime", "yyyy-MM-dd HH:mm:ss"))
+           .withColumn("tip_pct", col("tip_amount") / col("total_amount"))
+           .limit(1000)
+
+)
+display(trip_df)
+
+/***************************************
+
+****************************************/
+
+zone_df = (spark.read
+    .option("header", "true")
+    .csv("/databricks-datasets/nyctaxi/taxizone/taxi_zone_lookup.csv")
+           )
+zone_df.show()
+
+/***************************************
+
+****************************************/
+
+full_df = (trip_df
+    .join(zone_df, 
+          trip_df.PULocationID == zone_df.LocationID,
+          how="left")
+    .drop("LocationID")
+           )
+
+/***************************************
+
+****************************************/
+
+(full_df.write
+    .format("delta")
+    .mode("overwrite")
+    .save("/tmp/datasets/datakickstart/yellow_trips_sample")
+    )
+
+
+/***************************************
+
+****************************************/
+
+full_df.write.mode("overwrite").saveAsTable("yellow_trips_sample")
